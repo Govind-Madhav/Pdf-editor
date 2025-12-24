@@ -1,4 +1,5 @@
 import { PDFDocument, degrees, StandardFonts, rgb } from 'pdf-lib';
+import JSZip from 'jszip';
 
 // Helper to convert hex color to RGB
 const hexToRgb = (hex, opacity = 1) => {
@@ -247,4 +248,34 @@ export const downloadPDF = (bytes, filename) => {
     link.click();
     document.body.removeChild(link);
     setTimeout(() => URL.revokeObjectURL(link.href), 100);
+};
+
+export const splitPDF = async (file, interval) => {
+    const arrayBuffer = await file.arrayBuffer();
+    const pdfDoc = await PDFDocument.load(arrayBuffer);
+    const totalPages = pdfDoc.getPageCount();
+    const zip = new JSZip();
+
+    let fileCount = 1;
+    for (let i = 0; i < totalPages; i += interval) {
+        const subDoc = await PDFDocument.create();
+
+        // Calculate the range of pages for this chunk
+        const end = Math.min(i + interval, totalPages);
+        const pageIndices = [];
+        for (let j = i; j < end; j++) {
+            pageIndices.push(j);
+        }
+
+        const copiedPages = await subDoc.copyPages(pdfDoc, pageIndices);
+        copiedPages.forEach(page => subDoc.addPage(page));
+
+        const pdfBytes = await subDoc.save();
+        const baseName = file.name.replace('.pdf', '');
+        zip.file(`${baseName}_part_${fileCount}.pdf`, pdfBytes);
+        fileCount++;
+    }
+
+    const zipContent = await zip.generateAsync({ type: 'blob' });
+    return zipContent;
 };

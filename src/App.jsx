@@ -1,11 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import Header from './components/Header';
 import DropZone from './components/DropZone';
 import FileList from './components/FileList';
 import Controls from './components/Controls';
 import Modal from './components/Modal';
 import FileEditor from './components/FileEditor';
-import { mergePDFs, downloadPDF } from './utils/pdf';
+import SplitModal from './components/SplitModal';
+import { mergePDFs, downloadPDF, splitPDF } from './utils/pdf';
 import { getPdfPageCount } from './utils/pdf-render';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -14,38 +15,58 @@ function App() {
   const [isMerging, setIsMerging] = useState(false);
   const [status, setStatus] = useState({ type: '', message: '' });
   const [editingFileId, setEditingFileId] = useState(null);
+  const [splittingFileId, setSplittingFileId] = useState(null);
+
+  const statusTimeoutRef = useRef(null);
+
+  const clearStatusLater = (ms = 3000) => {
+    if (statusTimeoutRef.current) clearTimeout(statusTimeoutRef.current);
+    statusTimeoutRef.current = setTimeout(() => {
+      setStatus({ type: '', message: '' });
+    }, ms);
+  };
 
   const handleFilesAdded = async (newFiles) => {
     if (newFiles.length === 0) return;
 
-    // Create placeholders immediately for UI feedback if needed, 
-    // but parsing is usually fast enough for local files.
-    // We'll process them and then add to state.
-
-    const newFileItems = [];
-
-    // Process sequentially or parallel? Parallel is fine.
-    await Promise.all(newFiles.map(async (file) => {
+    const processedFiles = await Promise.all(newFiles.map(async (file) => {
       const id = crypto.randomUUID();
       let numPages = 0;
       try {
         numPages = await getPdfPageCount(file);
       } catch (error) {
         console.error("Failed to count pages", error);
+        return null;
       }
 
-      const pages = Array.from({ length: numPages }, (_, i) => ({
-        id: `${id}-${i}`,
-        originalIndex: i,
-        rotation: 0
-      }));
+      if (!numPages || numPages === 0) return null;
 
-      newFileItems.push({ id, file, pages });
+      return {
+        id,
+        file,
+        pages: Array.from({ length: numPages }, (_, i) => ({
+          id: `${id}-${i}`,
+          originalIndex: i,
+          rotation: 0
+        }))
+      };
     }));
 
-    setFiles(prev => [...prev, ...newFileItems]);
-    setStatus({ type: 'success', message: `${newFiles.length} file(s) added successfully` });
-    setTimeout(() => setStatus({ type: '', message: '' }), 3000);
+    const validFiles = processedFiles.filter(Boolean);
+
+    if (validFiles.length < newFiles.length) {
+      setStatus({ type: 'error', message: `Skipped ${newFiles.length - validFiles.length} invalid/corrupted file(s).` });
+      clearStatusLater(4000);
+    }
+
+    if (validFiles.length > 0) {
+      setFiles(prev => [...prev, ...validFiles]);
+      // Only override status if we didn't just set an error
+      if (validFiles.length === newFiles.length) {
+        setStatus({ type: 'success', message: `${validFiles.length} file(s) added successfully` });
+      }
+      clearStatusLater(3000);
+    }
   };
 
   const handleRemove = (id) => {
@@ -82,6 +103,40 @@ function App() {
     setEditingFileId(null);
   };
 
+  const handleSplitClick = (id) => {
+    setSplittingFileId(id);
+  };
+
+  const handleSplitConfirm = async (interval) => {
+    const fileItem = files.find(f => f.id === splittingFileId);
+    if (!fileItem) return;
+
+    setStatus({ type: 'info', message: 'Splitting PDF... Please wait.' });
+    setSplittingFileId(null);
+
+    try {
+      await new Promise(resolve => setTimeout(resolve, 100));
+      const zipContent = await splitPDF(fileItem.file, interval);
+
+      // Create download link for ZIP
+      const blob = new Blob([zipContent], { type: 'application/zip' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = `${fileItem.file.name.replace('.pdf', '')}-split.zip`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(link.href);
+
+      setStatus({ type: 'success', message: 'PDF split successfully!' });
+    } catch (error) {
+      console.error(error);
+      setStatus({ type: 'error', message: 'Failed to split PDF.' });
+    } finally {
+      clearStatusLater(5000);
+    }
+  };
+
   const handleMerge = async () => {
     if (files.length < 1) return; // Allow 1 file if they just want to modify pages
 
@@ -101,14 +156,19 @@ function App() {
       setStatus({ type: 'error', message: 'Failed to merge PDFs. Please try again.' });
     } finally {
       setIsMerging(false);
-      setTimeout(() => setStatus({ type: '', message: '' }), 5000);
+      clearStatusLater(5000);
     }
   };
 
   const editingFile = files.find(f => f.id === editingFileId);
 
   return (
-    <div className="min-h-screen p-4 md:p-8 flex flex-col items-center">
+    <div className="min-h-screen p-4 md:p-8 flex flex-col items-center relative selection:bg-violet-500/30">
+      {/* Ambient Glows */}
+      <div className="fixed top-0 left-0 w-full h-full overflow-hidden -z-10 pointer-events-none">
+        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-violet-600/20 rounded-full blur-[128px]" />
+        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-indigo-600/20 rounded-full blur-[128px]" />
+      </div>
       <div className="w-full max-w-4xl space-y-8">
         <Header />
 
@@ -130,7 +190,7 @@ function App() {
                   isMerging={isMerging}
                 />
 
-                <FileList files={files} onRemove={handleRemove} onEdit={handleEdit} />
+                <FileList files={files} onRemove={handleRemove} onEdit={handleEdit} onSplit={handleSplitClick} />
               </motion.div>
             )}
           </AnimatePresence>
@@ -175,6 +235,16 @@ function App() {
               onCancel={() => setEditingFileId(null)}
             />
           </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {splittingFileId && (
+          <SplitModal
+            file={files.find(f => f.id === splittingFileId)}
+            onClose={() => setSplittingFileId(null)}
+            onSplit={handleSplitConfirm}
+          />
         )}
       </AnimatePresence>
     </div>

@@ -1,8 +1,16 @@
 import React from 'react';
-import { FileText, Trash2, Settings2 } from 'lucide-react';
+import { FileText, Trash2, Settings2, Scissors } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-export default function FileList({ files, onRemove, onEdit }) {
+export default function FileList({ files, onRemove, onEdit, onSplit }) {
+    if (!files || files.length === 0) {
+        return (
+            <div className="w-full bg-slate-800/30 backdrop-blur-md rounded-2xl border border-white/5 p-8 text-center">
+                <p className="text-slate-500 text-sm">No files added yet</p>
+            </div>
+        );
+    }
+
     return (
         <div className="w-full bg-slate-800/30 backdrop-blur-md rounded-2xl border border-white/5 p-4 max-h-[400px] overflow-y-auto custom-scrollbar">
             <ul className="space-y-2">
@@ -21,9 +29,11 @@ export default function FileList({ files, onRemove, onEdit }) {
                                     <FileText size={20} />
                                 </div>
                                 <div className="flex flex-col min-w-0">
-                                    <span className="truncate font-medium text-slate-200 text-sm md:text-base">{item.file.name}</span>
+                                    <span className="truncate font-medium text-slate-200 text-sm md:text-base">
+                                        {item.file?.name ?? 'Unnamed file'}
+                                    </span>
                                     <span className="text-xs text-slate-500">
-                                        {(item.file.size / 1024 / 1024).toFixed(2)} MB • {item.pages ? item.pages.length : 0} pages
+                                        {item.file ? (item.file.size / 1024 / 1024).toFixed(2) : '0.00'} MB • {item.pages?.length ?? 0} pages
                                     </span>
                                 </div>
                             </div>
@@ -33,13 +43,23 @@ export default function FileList({ files, onRemove, onEdit }) {
                                     onClick={() => onEdit(item.id)}
                                     className="p-2 text-slate-500 hover:text-white hover:bg-slate-700 rounded-lg transition-all"
                                     title="Modify pages"
+                                    aria-label="Modify pages"
                                 >
                                     <Settings2 size={18} />
+                                </button>
+                                <button
+                                    onClick={() => onSplit(item.id)}
+                                    className="p-2 text-slate-500 hover:text-white hover:bg-slate-700 rounded-lg transition-all"
+                                    title="Split PDF"
+                                    aria-label="Split PDF"
+                                >
+                                    <Scissors size={18} />
                                 </button>
                                 <button
                                     onClick={() => onRemove(item.id)}
                                     className="p-2 text-slate-500 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-all"
                                     title="Remove file"
+                                    aria-label="Remove file"
                                 >
                                     <Trash2 size={18} />
                                 </button>
