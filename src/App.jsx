@@ -6,7 +6,7 @@ import Controls from './components/Controls';
 import Modal from './components/Modal';
 import FileEditor from './components/FileEditor';
 import SplitModal from './components/SplitModal';
-import { mergePDFs, downloadPDF, splitPDF } from './utils/pdf';
+import { mergePDFs, downloadPDF, splitPDF, bulkSplitPDF } from './utils/pdf';
 import { getPdfPageCount } from './utils/pdf-render';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -16,6 +16,7 @@ function App() {
   const [status, setStatus] = useState({ type: '', message: '' });
   const [editingFileId, setEditingFileId] = useState(null);
   const [splittingFileId, setSplittingFileId] = useState(null);
+  const [isBulkSplit, setIsBulkSplit] = useState(false);
 
   const statusTimeoutRef = useRef(null);
 
@@ -40,6 +41,11 @@ function App() {
       }
 
       if (!numPages || numPages === 0) return null;
+
+      if (file.size > 100 * 1024 * 1024) {
+        setStatus({ type: 'info', message: `Large file detected (${(file.size / 1024 / 1024).toFixed(0)}MB). Processing may be slow.` });
+        clearStatusLater(6000);
+      }
 
       return {
         id,
@@ -105,9 +111,55 @@ function App() {
 
   const handleSplitClick = (id) => {
     setSplittingFileId(id);
+    setIsBulkSplit(false);
+  };
+
+  const handleSplitAllClick = () => {
+    setSplittingFileId(true); // Truthy to open modal, but logic relies on isBulkSplit
+    setIsBulkSplit(true);
   };
 
   const handleSplitConfirm = async (interval) => {
+    if (isBulkSplit) {
+      setSplittingFileId(null);
+
+      let processed = 0;
+      const total = files.length;
+
+      for (const f of files) {
+        try {
+          processed++;
+          setStatus({ type: 'info', message: `Splitting ${processed}/${total}: ${f.file.name}...` });
+
+          // Yield to UI
+          await new Promise(resolve => setTimeout(resolve, 100));
+
+          const zipContent = await splitPDF(f.file, interval);
+
+          // Create individual ZIP download
+          const blob = new Blob([zipContent], { type: 'application/zip' });
+          const link = document.createElement('a');
+          link.href = URL.createObjectURL(blob);
+          link.download = `${f.file.name.replace('.pdf', '')}-split.zip`;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+
+          // Small delay to prevent browser throttling multiple downloads
+          await new Promise(resolve => setTimeout(resolve, 500));
+          URL.revokeObjectURL(link.href);
+
+        } catch (err) {
+          console.error(`Failed to split ${f.file.name}`, err);
+        }
+      }
+
+      setStatus({ type: 'success', message: 'All bulk splits completed!' });
+      clearStatusLater(5000);
+      setIsBulkSplit(false);
+      return;
+    }
+
     const fileItem = files.find(f => f.id === splittingFileId);
     if (!fileItem) return;
 
@@ -187,6 +239,7 @@ function App() {
                   count={files.length}
                   onClear={handleClear}
                   onMerge={handleMerge}
+                  onSplitAll={handleSplitAllClick}
                   isMerging={isMerging}
                 />
 
@@ -241,8 +294,12 @@ function App() {
       <AnimatePresence>
         {splittingFileId && (
           <SplitModal
-            file={files.find(f => f.id === splittingFileId)}
-            onClose={() => setSplittingFileId(null)}
+            file={isBulkSplit ? null : files.find(f => f.id === splittingFileId)}
+            isBulk={isBulkSplit}
+            onClose={() => {
+              setSplittingFileId(null);
+              setIsBulkSplit(false);
+            }}
             onSplit={handleSplitConfirm}
           />
         )}

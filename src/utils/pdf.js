@@ -54,6 +54,8 @@ const applyAnnotations = async (page, annotations, pdfDoc, imageCache) => {
         const map = (lx, ly) => transformPoint(lx * scale, ly * scale, rotation, pdfWidth, pdfHeight);
 
         if (ann.type === 'path') {
+            if (!ann.points || ann.points.length < 2) continue;
+
             const { color, opacity } = hexToRgb(ann.color, ann.opacity);
             const ops = ann.points.map((p, i) => {
                 const { x, y } = map(p.x, p.y);
@@ -67,6 +69,7 @@ const applyAnnotations = async (page, annotations, pdfDoc, imageCache) => {
             });
         }
         else if (ann.type === 'text') {
+            // NOTE: pdf-lib does not support text opacity; color is applied fully opaque
             const { color } = hexToRgb(ann.color);
             const { x, y } = map(ann.x, ann.y);
             const scaledSize = ann.size * scale;
@@ -100,12 +103,13 @@ const applyAnnotations = async (page, annotations, pdfDoc, imageCache) => {
                 let drawY = mapY;
 
                 // Adjust anchor for PDF bottom-left origin requirement
+                // NOTE: Rotation anchor logic is approximate for 180/270 degrees.
+                // Ideally, anchoring should happen before rotation transformation.
                 if (rotation === 0) {
                     drawY -= h;
                 } else if (rotation === 90) {
                     drawX -= w;
                 } else if (rotation === 180) {
-                    // Approximated for 180/270 as noted
                     drawX -= w;
                 } else if (rotation === 270) {
                     drawY -= h;
@@ -250,17 +254,18 @@ export const downloadPDF = (bytes, filename) => {
     setTimeout(() => URL.revokeObjectURL(link.href), 100);
 };
 
-export const splitPDF = async (file, interval) => {
+const getSplitParts = async (file, interval) => {
     const arrayBuffer = await file.arrayBuffer();
     const pdfDoc = await PDFDocument.load(arrayBuffer);
     const totalPages = pdfDoc.getPageCount();
-    const zip = new JSZip();
+    const parts = [];
 
+    const baseName = file.name.replace('.pdf', '');
     let fileCount = 1;
+
     for (let i = 0; i < totalPages; i += interval) {
         const subDoc = await PDFDocument.create();
 
-        // Calculate the range of pages for this chunk
         const end = Math.min(i + interval, totalPages);
         const pageIndices = [];
         for (let j = i; j < end; j++) {
@@ -271,11 +276,39 @@ export const splitPDF = async (file, interval) => {
         copiedPages.forEach(page => subDoc.addPage(page));
 
         const pdfBytes = await subDoc.save();
-        const baseName = file.name.replace('.pdf', '');
-        zip.file(`${baseName}_part_${fileCount}.pdf`, pdfBytes);
+        parts.push({
+            name: `${baseName}_part_${fileCount}.pdf`,
+            data: pdfBytes
+        });
         fileCount++;
     }
+    return parts;
+};
 
-    const zipContent = await zip.generateAsync({ type: 'blob' });
-    return zipContent;
+export const splitPDF = async (file, interval) => {
+    const parts = await getSplitParts(file, interval);
+    const zip = new JSZip();
+
+    parts.forEach(part => {
+        zip.file(part.name, part.data);
+    });
+
+    return await zip.generateAsync({ type: 'blob' });
+};
+
+export const bulkSplitPDF = async (files, interval) => {
+    const rootZip = new JSZip();
+
+    for (const file of files) {
+        const parts = await getSplitParts(file, interval);
+        // Create a folder for each file to keep it organized
+        const folderName = file.name.replace('.pdf', '');
+        const folder = rootZip.folder(folderName);
+
+        parts.forEach(part => {
+            folder.file(part.name, part.data);
+        });
+    }
+
+    return await rootZip.generateAsync({ type: 'blob' });
 };

@@ -2,11 +2,11 @@ import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { X, Scissors } from 'lucide-react';
 
-export default function SplitModal({ file, onClose, onSplit }) {
+export default function SplitModal({ file, onClose, onSplit, isBulk }) {
     const [interval, setInterval] = useState(2);
     const [error, setError] = useState('');
 
-    const totalPages = file?.pages?.length || 0;
+    const totalPages = isBulk ? 0 : (file?.pages?.length || 0);
 
     const handleSubmit = (e) => {
         e.preventDefault();
@@ -14,7 +14,7 @@ export default function SplitModal({ file, onClose, onSplit }) {
             setError('Please enter a valid number greater than 0');
             return;
         }
-        if (interval >= totalPages) {
+        if (!isBulk && interval >= totalPages) {
             setError(`Split interval must be less than total pages (${totalPages})`);
             return;
         }
@@ -50,9 +50,19 @@ export default function SplitModal({ file, onClose, onSplit }) {
 
                 <div className="p-6 space-y-4">
                     <div className="bg-slate-800/50 p-4 rounded-xl border border-white/5">
-                        <p className="text-sm text-slate-400 mb-1">Target File</p>
-                        <p className="text-slate-200 font-medium truncate">{file?.file?.name}</p>
-                        <p className="text-xs text-slate-500 mt-1">{totalPages} pages total</p>
+                        {isBulk ? (
+                            <>
+                                <p className="text-sm text-slate-400 mb-1">Bulk Action</p>
+                                <p className="text-slate-200 font-medium truncate">Splitting all files</p>
+                                <p className="text-xs text-slate-500 mt-1">Files smaller than the interval will be skipped/preserved.</p>
+                            </>
+                        ) : (
+                            <>
+                                <p className="text-sm text-slate-400 mb-1">Target File</p>
+                                <p className="text-slate-200 font-medium truncate">{file?.file?.name}</p>
+                                <p className="text-xs text-slate-500 mt-1">{totalPages} pages total</p>
+                            </>
+                        )}
                     </div>
 
                     <form onSubmit={handleSubmit} className="space-y-4">
@@ -63,7 +73,7 @@ export default function SplitModal({ file, onClose, onSplit }) {
                             <input
                                 type="number"
                                 min="1"
-                                max={totalPages - 1}
+                                max={isBulk ? undefined : (totalPages - 1)}
                                 value={interval}
                                 onChange={(e) => {
                                     setInterval(Number(e.target.value));
