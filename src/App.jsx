@@ -7,6 +7,7 @@ import Modal from './components/Modal';
 import FileEditor from './components/FileEditor';
 import SplitModal from './components/SplitModal';
 import { mergePDFs, downloadPDF, splitPDF, bulkSplitPDF } from './utils/pdf';
+import CompressModal from './components/CompressModal';
 import { getPdfPageCount } from './utils/pdf-render';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -16,6 +17,7 @@ function App() {
   const [status, setStatus] = useState({ type: '', message: '' });
   const [editingFileId, setEditingFileId] = useState(null);
   const [splittingFileId, setSplittingFileId] = useState(null);
+  const [compressingFileId, setCompressingFileId] = useState(null);
   const [isBulkSplit, setIsBulkSplit] = useState(false);
 
   const statusTimeoutRef = useRef(null);
@@ -212,6 +214,23 @@ function App() {
     }
   };
 
+  const handleCompressClick = (id) => {
+    setCompressingFileId(id);
+  };
+
+  const handleCompressConfirm = async (bytes, params) => {
+    const fileItem = files.find(f => f.id === compressingFileId);
+    if (!fileItem) return;
+
+    const originalName = fileItem.file.name.replace('.pdf', '');
+    const newName = `${originalName}_compressed_${params.targetReduction}pct.pdf`;
+
+    downloadPDF(bytes, newName);
+    setCompressingFileId(null);
+    setStatus({ type: 'success', message: `PDF compressed to target (${params.targetReduction}%) successfully!` });
+    clearStatusLater(5000);
+  };
+
   const editingFile = files.find(f => f.id === editingFileId);
 
   return (
@@ -243,7 +262,13 @@ function App() {
                   isMerging={isMerging}
                 />
 
-                <FileList files={files} onRemove={handleRemove} onEdit={handleEdit} onSplit={handleSplitClick} />
+                <FileList
+                  files={files}
+                  onRemove={handleRemove}
+                  onEdit={handleEdit}
+                  onSplit={handleSplitClick}
+                  onCompress={handleCompressClick}
+                />
               </motion.div>
             )}
           </AnimatePresence>
@@ -301,6 +326,16 @@ function App() {
               setIsBulkSplit(false);
             }}
             onSplit={handleSplitConfirm}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {compressingFileId && (
+          <CompressModal
+            file={files.find(f => f.id === compressingFileId)?.file}
+            onClose={() => setCompressingFileId(null)}
+            onCompress={handleCompressConfirm}
           />
         )}
       </AnimatePresence>

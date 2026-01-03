@@ -1,8 +1,8 @@
 import React from 'react';
-import { FileText, Trash2, Settings2, Scissors } from 'lucide-react';
+import { FileText, Trash2, Settings2, Scissors, Gauge } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-export default function FileList({ files, onRemove, onEdit, onSplit }) {
+export default function FileList({ files, onRemove, onEdit, onSplit, onCompress }) {
     if (!files || files.length === 0) {
         return (
             <div className="w-full bg-slate-800/30 backdrop-blur-md rounded-2xl border border-white/5 p-8 text-center">
@@ -38,7 +38,15 @@ export default function FileList({ files, onRemove, onEdit, onSplit }) {
                                 </div>
                             </div>
 
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-1">
+                                <button
+                                    onClick={() => onCompress(item.id)}
+                                    className="p-2 hover:bg-indigo-500/10 rounded-lg text-slate-400 hover:text-indigo-400 transition-all group/btn"
+                                    title="Compress PDF"
+                                    aria-label="Compress PDF"
+                                >
+                                    <Gauge size={18} className="group-hover/btn:scale-110 transition-transform" />
+                                </button>
                                 <button
                                     onClick={() => onEdit(item.id)}
                                     className="p-2 text-slate-500 hover:text-white hover:bg-slate-700 rounded-lg transition-all"
