@@ -1,3 +1,4 @@
+import './worker/worker-polyfill';
 import * as pdfjsLib from 'pdfjs-dist';
 // Note: We'll need to set the workerSrc if using this inside a worker too, 
 // but usually workers can't start workers easily. We'll use the main dist.

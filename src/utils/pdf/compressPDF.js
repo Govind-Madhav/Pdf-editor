@@ -9,8 +9,12 @@ export const compressPDF = async (arrayBuffer, params, onProgress, abortSignal) 
     const { strategy, targetReduction } = params;
     const originalSize = arrayBuffer.byteLength;
 
+    // Preserve the original buffer for potential refinement
+    // Clone it for the first pass to prevent detachment
+    const firstPassBuffer = arrayBuffer.slice(0);
+
     // Phase 1: Fast Exploration
-    let result = await executeStrategy(arrayBuffer, strategy, params, onProgress, abortSignal);
+    let result = await executeStrategy(firstPassBuffer, strategy, params, onProgress, abortSignal);
 
     if (abortSignal?.aborted) throw new Error("AbortError");
 
@@ -30,7 +34,9 @@ export const compressPDF = async (arrayBuffer, params, onProgress, abortSignal) 
         // Notify progress system that we're refining
         if (onProgress) onProgress(0.5, "Refining for target...");
 
-        result = await executeStrategy(arrayBuffer, strategy, refinedParams, (p) => {
+        // Use the preserved original buffer for refinement
+        const refinementBuffer = arrayBuffer.slice(0);
+        result = await executeStrategy(refinementBuffer, strategy, refinedParams, (p) => {
             if (onProgress) onProgress(0.5 + p * 0.5, "Finalizing...");
         }, abortSignal);
     }

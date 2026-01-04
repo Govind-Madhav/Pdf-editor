@@ -223,11 +223,12 @@ function App() {
     if (!fileItem) return;
 
     const originalName = fileItem.file.name.replace('.pdf', '');
-    const newName = `${originalName}_compressed_${params.targetReduction}pct.pdf`;
+    const targetReduction = params?.targetReduction || 'unknown';
+    const newName = `${originalName}_compressed_${targetReduction}pct.pdf`;
 
     downloadPDF(bytes, newName);
     setCompressingFileId(null);
-    setStatus({ type: 'success', message: `PDF compressed to target (${params.targetReduction}%) successfully!` });
+    setStatus({ type: 'success', message: `PDF compressed to target (${targetReduction}%) successfully!` });
     clearStatusLater(5000);
   };
 

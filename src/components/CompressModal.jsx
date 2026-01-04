@@ -33,69 +33,89 @@ const CompressModal = ({ file, onClose, onCompress }) => {
     const [isCompressing, setIsCompressing] = useState(false);
     const [progress, setProgress] = useState(0);
     const [statusText, setStatusText] = useState('');
+    const [error, setError] = useState(null);
 
     const workerRef = useRef(null);
     const debounceTimerRef = useRef(null);
 
     // Initialize Worker and Session
     useEffect(() => {
-        workerRef.current = new Worker(
-            new URL('../utils/pdf/worker/pdfWorker.js', import.meta.url),
-            { type: 'module' }
-        );
+        try {
+            workerRef.current = new Worker(
+                new URL('../utils/pdf/worker/pdfWorker.js', import.meta.url),
+                { type: 'module' }
+            );
 
-        workerRef.current.onmessage = (e) => {
-            const { type, result, progress: p, status, error } = e.data;
+            workerRef.current.onmessage = (e) => {
+                const { type, result, progress: p, status, error: workerErr } = e.data;
 
-            switch (type) {
-                case SESSION_INITIALIZED:
-                    setIsSessionInit(true);
-                    setIsAnalyzing(true);
-                    workerRef.current.postMessage({ type: ANALYZE_PDF, id: 'analyze' });
-                    break;
+                switch (type) {
+                    case 'PONG':
+                        console.log("Worker alive");
+                        break;
 
-                case ANALYSIS_COMPLETE:
-                    setAnalysis(result);
-                    setIsAnalyzing(false);
-                    break;
+                    case SESSION_INITIALIZED:
+                        setIsSessionInit(true);
+                        setIsAnalyzing(true);
+                        workerRef.current.postMessage({ type: ANALYZE_PDF, id: 'analyze' });
+                        break;
 
-                case PREVIEW_READY:
-                    setPreviewBitmap(result);
-                    setIsPreviewing(false);
-                    break;
+                    case ANALYSIS_COMPLETE:
+                        setAnalysis(result);
+                        setIsAnalyzing(false);
+                        break;
 
-                case ORIGINAL_READY:
-                    setOriginalBitmap(result);
-                    break;
+                    case PREVIEW_READY:
+                        setPreviewBitmap(result);
+                        setIsPreviewing(false);
+                        break;
 
-                case PROGRESS_UPDATE:
-                    setProgress(p);
-                    if (status) setStatusText(status);
-                    break;
+                    case ORIGINAL_READY:
+                        setOriginalBitmap(result);
+                        break;
 
-                case COMPRESSION_COMPLETE:
-                    onCompress(result, params);
-                    setIsCompressing(false);
-                    break;
+                    case PROGRESS_UPDATE:
+                        setProgress(p);
+                        if (status) setStatusText(status);
+                        break;
 
-                case 'CANCELLED':
-                    setIsCompressing(false);
-                    setStatusText('Cancelled');
-                    break;
+                    case COMPRESSION_COMPLETE:
+                        onCompress(result, params);
+                        setIsCompressing(false);
+                        break;
 
-                case 'ERROR':
-                    console.error("Worker Error:", error);
-                    setIsAnalyzing(false);
-                    setIsPreviewing(false);
-                    setIsCompressing(false);
-                    break;
-            }
-        };
+                    case 'CANCELLED':
+                        setIsCompressing(false);
+                        setStatusText('Cancelled');
+                        break;
 
-        // Start Session
-        workerRef.current.postMessage({ type: INIT_SESSION, payload: { file }, id: 'init' });
+                    case 'ERROR':
+                        console.error("Worker Error:", workerErr);
+                        setError(workerErr);
+                        setIsAnalyzing(false);
+                        setIsPreviewing(false);
+                        setIsCompressing(false);
+                        break;
+                }
+            };
 
-        return () => workerRef.current.terminate();
+            workerRef.current.onerror = (err) => {
+                console.error("Worker Script Error:", err);
+                setError("Failed to load processing engine. Please check your connection.");
+            };
+
+            // Health check
+            workerRef.current.postMessage({ type: 'PING' });
+
+            // Start Session
+            workerRef.current.postMessage({ type: INIT_SESSION, payload: { file }, id: 'init' });
+
+        } catch (err) {
+            console.error("Failed to start worker:", err);
+            setError("Could not start processing engine.");
+        }
+
+        return () => workerRef.current?.terminate();
     }, [file]);
 
     // Handle parameter calculation and preview trigger
@@ -166,7 +186,21 @@ const CompressModal = ({ file, onClose, onCompress }) => {
                     </div>
 
                     <div className="flex-1 overflow-y-auto p-6 space-y-8 custom-scrollbar">
-                        {!isSessionInit || isAnalyzing ? (
+                        {error ? (
+                            <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-2xl flex flex-col items-center gap-3 text-center">
+                                <AlertCircle className="text-red-400" size={32} />
+                                <div className="space-y-1">
+                                    <h3 className="text-sm font-bold text-red-200">Processing Error</h3>
+                                    <p className="text-xs text-red-300/60">{error}</p>
+                                </div>
+                                <button
+                                    onClick={() => window.location.reload()}
+                                    className="px-4 py-2 bg-red-500/20 hover:bg-red-500/30 text-red-200 text-xs font-bold rounded-xl transition-all"
+                                >
+                                    Retry
+                                </button>
+                            </div>
+                        ) : !isSessionInit || isAnalyzing ? (
                             <div className="space-y-4">
                                 <div className="h-4 w-3/4 bg-slate-800 rounded-full animate-pulse" />
                                 <div className="grid grid-cols-2 gap-3">

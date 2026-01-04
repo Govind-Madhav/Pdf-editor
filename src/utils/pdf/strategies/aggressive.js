@@ -1,3 +1,4 @@
+import '../worker/worker-polyfill';
 import { PDFDocument, degrees } from 'pdf-lib';
 import * as pdfjsLib from 'pdfjs-dist';
 
@@ -9,7 +10,12 @@ export const compressAggressive = async (arrayBuffer, params, onProgress, abortS
     const { dpi, jpegQuality } = params;
     const scale = dpi / 72; // PDF standard is 72 DPI
 
-    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    // disableWorker: true is critical when running inside another worker
+    const pdf = await pdfjsLib.getDocument({
+        data: arrayBuffer,
+        disableFontFace: true,
+        disableWorker: true
+    }).promise;
     const outPdfDoc = await PDFDocument.create();
     const totalPages = pdf.numPages;
 
