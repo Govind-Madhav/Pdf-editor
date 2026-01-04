@@ -6,10 +6,12 @@ import {
     INIT_SESSION,
     ANALYZE_PDF,
     RENDER_PREVIEW,
+    RENDER_ORIGINAL,
     START_COMPRESSION,
     CANCEL,
     ANALYSIS_COMPLETE,
     PREVIEW_READY,
+    ORIGINAL_READY,
     COMPRESSION_COMPLETE,
     PROGRESS_UPDATE,
     SESSION_INITIALIZED
@@ -25,7 +27,7 @@ const CompressModal = ({ file, onClose, onCompress }) => {
     const [analysis, setAnalysis] = useState(null);
     const [isAnalyzing, setIsAnalyzing] = useState(false);
     const [previewBitmap, setPreviewBitmap] = useState(null);
-    const [originalUrl, setOriginalUrl] = useState(null);
+    const [originalBitmap, setOriginalBitmap] = useState(null);
     const [isPreviewing, setIsPreviewing] = useState(false);
     const [params, setParams] = useState(null);
     const [isCompressing, setIsCompressing] = useState(false);
@@ -60,6 +62,10 @@ const CompressModal = ({ file, onClose, onCompress }) => {
                 case PREVIEW_READY:
                     setPreviewBitmap(result);
                     setIsPreviewing(false);
+                    break;
+
+                case ORIGINAL_READY:
+                    setOriginalBitmap(result);
                     break;
 
                 case PROGRESS_UPDATE:
@@ -99,10 +105,12 @@ const CompressModal = ({ file, onClose, onCompress }) => {
         const newParams = calculateCompressionParams(analysis, targetReduction, qualityFloor);
         setParams({ ...newParams, targetReduction });
 
-        // Update Original Preview if not set
-        if (!originalUrl) {
-            renderPageToImage(file, analysis.samplePages.mixed || 0, 1.5).then(url => {
-                setOriginalUrl(url);
+        // Update Original Preview via Worker
+        if (!originalBitmap) {
+            workerRef.current.postMessage({
+                type: RENDER_ORIGINAL,
+                payload: { pageNum: analysis.samplePages.mixed || 1 },
+                id: 'original'
             });
         }
 
@@ -213,8 +221,8 @@ const CompressModal = ({ file, onClose, onCompress }) => {
                                                 disabled={isCompressing}
                                                 onClick={() => setQualityFloor(opt.id)}
                                                 className={`p-3 rounded-2xl border text-left transition-all duration-200 flex items-center gap-3 ${qualityFloor === opt.id
-                                                        ? 'bg-indigo-500/10 border-indigo-500/40 text-indigo-200 shadow-lg shadow-indigo-500/5'
-                                                        : 'bg-white/5 border-white/5 text-slate-400 hover:border-white/10 hover:bg-white/[0.07]'
+                                                    ? 'bg-indigo-500/10 border-indigo-500/40 text-indigo-200 shadow-lg shadow-indigo-500/5'
+                                                    : 'bg-white/5 border-white/5 text-slate-400 hover:border-white/10 hover:bg-white/[0.07]'
                                                     }`}
                                             >
                                                 <div className={`p-2 rounded-xl ${qualityFloor === opt.id ? 'bg-indigo-500 text-white' : 'bg-slate-800 text-slate-500'}`}>
@@ -278,7 +286,7 @@ const CompressModal = ({ file, onClose, onCompress }) => {
 
                 <div className="flex-1 bg-slate-950 p-6 md:p-8 flex flex-col h-full">
                     <PreviewPane
-                        originalUrl={originalUrl}
+                        originalBitmap={originalBitmap}
                         compressedBitmap={previewBitmap}
                         isProcessing={isPreviewing}
                         analysis={analysis}

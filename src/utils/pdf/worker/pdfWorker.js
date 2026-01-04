@@ -3,10 +3,12 @@ import {
     INIT_SESSION,
     ANALYZE_PDF,
     RENDER_PREVIEW,
+    RENDER_ORIGINAL,
     START_COMPRESSION,
     CANCEL,
     ANALYSIS_COMPLETE,
     PREVIEW_READY,
+    ORIGINAL_READY,
     COMPRESSION_COMPLETE,
     PROGRESS_UPDATE,
     SESSION_INITIALIZED
@@ -62,6 +64,21 @@ self.onmessage = async (e) => {
                     id,
                     result: imageBitmap
                 }, [imageBitmap]); // Transferable ImageBitmap
+                break;
+            }
+
+            case RENDER_ORIGINAL: {
+                if (!session.pdf) throw new Error("Session not initialized");
+
+                const { pageNum } = payload;
+                // Render at higher scale but with 1.0 quality (no sim)
+                const imageBitmap = await renderPreviewSample(session.pdf, pageNum, { dpi: 150, jpegQuality: 1.0 });
+
+                self.postMessage({
+                    type: ORIGINAL_READY,
+                    id,
+                    result: imageBitmap
+                }, [imageBitmap]);
                 break;
             }
 

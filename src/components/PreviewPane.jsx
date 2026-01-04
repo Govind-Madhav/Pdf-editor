@@ -1,9 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { ZoomIn, ZoomOut, Maximize2 } from 'lucide-react';
 
-const PreviewPane = ({ originalUrl, compressedBitmap, isProcessing, analysis, params }) => {
+const PreviewPane = ({ originalBitmap, compressedBitmap, isProcessing, analysis, params }) => {
     const [zoom, setZoom] = useState(1);
     const canvasRef = useRef(null);
+    const originalCanvasRef = useRef(null);
 
     useEffect(() => {
         if (compressedBitmap && canvasRef.current) {
@@ -16,7 +17,18 @@ const PreviewPane = ({ originalUrl, compressedBitmap, isProcessing, analysis, pa
         }
     }, [compressedBitmap]);
 
-    if (!originalUrl && !isProcessing) {
+    useEffect(() => {
+        if (originalBitmap && originalCanvasRef.current) {
+            const canvas = originalCanvasRef.current;
+            canvas.width = originalBitmap.width;
+            canvas.height = originalBitmap.height;
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(originalBitmap, 0, 0);
+        }
+    }, [originalBitmap]);
+
+    if (!originalBitmap && !isProcessing) {
         return (
             <div className="h-full flex flex-col items-center justify-center text-slate-500 bg-slate-900/20 rounded-2xl border-2 border-dashed border-slate-800">
                 <Maximize2 className="w-12 h-12 mb-4 opacity-20" />
@@ -67,7 +79,8 @@ const PreviewPane = ({ originalUrl, compressedBitmap, isProcessing, analysis, pa
                     <div className="space-y-2">
                         <div className="text-[10px] uppercase font-bold text-slate-500 px-1">Original Content</div>
                         <div className="bg-white rounded-lg overflow-hidden shadow-2xl border border-white/10">
-                            {originalUrl ? <img src={originalUrl} className="w-full h-auto" alt="Original" /> : <div className="aspect-[3/4] bg-slate-800 animate-pulse" />}
+                            <canvas ref={originalCanvasRef} className="w-full h-auto" />
+                            {!originalBitmap && <div className="aspect-[3/4] bg-slate-800 animate-pulse" />}
                         </div>
                     </div>
                     <div className="space-y-2">
